@@ -109,7 +109,7 @@ If any single variation fails (fal error), the orchestrator reports partial succ
 
 ## Limits
 
-- **N capped at 4 by default** (lower than fal-image's 6 because video is more expensive). More than 4 starts costing real money fast on premium video models. If user explicitly asks for >4, **confirm cost first** — show "N × per-clip = total" before proceeding.
+- **N capped at 4 by default.** Video runs more expensive than image generation; more than 4 starts costing real money fast on premium models. If user explicitly asks for >4, **confirm cost first** — show "N × per-clip = total" before proceeding.
 - **Same model across all variations** — don't mix models within a batch. Apples-to-apples comparison requires identical model.
 - **Same seed is NOT used** — each variation uses a fresh seed so they're genuinely different. (If user wants seed-locked variations, that's a different request: "regenerate with seed X but vary Motion.")
 - **Same duration / fps / audio** across all variations — only the rotation slot changes. Anything else held constant.

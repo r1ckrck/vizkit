@@ -29,7 +29,7 @@ If `$PWD` is `$HOME`, `/`, `/etc`, `/usr`, `/var`, or any system path: **warn th
 | `images/` | Created on first image generation that day |
 | Date folder | `YYYY-MM-DD`, local timezone. Created on first generation that day |
 
-> Other type folders (`videos/`, `gifs/`) belong to other VizKit skills (fal-video, gif-maker) when they ship. fal-image only writes to `images/`.
+> fal-image writes only to `images/`. Other media types use sibling type folders (`videos/`, `gifs/`).
 
 ---
 
@@ -94,8 +94,11 @@ Every generated image has a same-named `.json` sidecar with full reproduction in
     "resolution": "WIDTHxHEIGHT",
     "seed": "integer | null",
     "mode": "generate | edit | upscale | batch",
-    "banned_word_mode": "advisory",
+    "model_choice_reason": "string — one-line explanation of why this model was chosen",
+    "reference_images": "array of {path_or_url, role} — empty when no references were passed; role is one of style | character | composition | edit-target",
+    "preflight_confirmed": "boolean — true if the pre-flight summary was shown and the user confirmed",
     "domain_inferred": "boolean — true if domain was fallback-inferred from closest match",
+    "request_id": "string — fal MCP request_id, the recovery handle if a call rejects/times out",
     "...": "any other model-specific params used"
   },
   "preset": "string — absolute path to preset .md used, or null",
@@ -135,15 +138,18 @@ Every generated image has a same-named `.json` sidecar with full reproduction in
   "type": "image",
   "domain": "product",
   "skill": "fal-image",
-  "model": "fal-ai/flux-pro/v1.1",
+  "model": "fal-ai/nano-banana-pro",
   "prompt": "A weathered ceramic espresso mug with a hairline chip at the rim, single shot of single-origin espresso showing a marbled tiger-stripe crema, resting on a worn oak counter inside a small-batch roastery at mid-morning...",
   "params": {
     "aspect_ratio": "4:3",
     "resolution": "1536x1152",
     "seed": null,
     "mode": "generate",
-    "banned_word_mode": "advisory",
-    "domain_inferred": false
+    "model_choice_reason": "Nano Banana Pro for premium photoreal hero with world-knowledge prompt",
+    "reference_images": [],
+    "preflight_confirmed": true,
+    "domain_inferred": false,
+    "request_id": "019dca..."
   },
   "preset": "/Users/<user>/Documents/Projects/<project>/.claude/skills/fal-image/presets/product.preset.md",
   "cost_usd": 0.05,

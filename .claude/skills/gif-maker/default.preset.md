@@ -11,8 +11,8 @@ The single default preset for gif-maker. No per-domain variants — all GIF defa
 - **default dither:** bayer (bayer_scale=5)
 - **default loop:** infinite
 - **default trim:** use full source
-- **default source model:** fal-ai/ltx-video
-- **default source duration:** model minimum (~5s for ltx-video)
+- **default source model:** fal-ai/kling-video/v2.5-turbo/pro/text-to-video (or `.../image-to-video` when a source still is provided)
+- **default source duration:** model minimum (5s on Kling 2.5 Turbo Pro)
 - **default source resolution:** smallest tier the chosen model exposes
 - **default source audio:** off
 - **default aspect ratio:** —

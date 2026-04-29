@@ -5,7 +5,7 @@ description: Create animated GIFs from scratch by orchestrating fal-video (sourc
 
 # gif-maker
 
-Animated GIF generation by orchestrating fal-video (source clip) + ffmpeg (palette + paletteuse). Pure orchestrator: no own brief-constructor (spawns fal-video's), no own model layer (uses ltx-video locked default). Has a single `default.preset.md` for GIF output defaults.
+Animated GIF generation by orchestrating fal-video (source clip) + ffmpeg (palette + paletteuse). Pure orchestrator: no own brief-constructor (spawns fal-video's), defaults to Kling 2.5 Turbo Pro for source-clip generation. Has a single `default.preset.md` for GIF output defaults.
 
 **Sibling-skill dependency:** gif-maker requires the `fal-video` skill installed at `$PWD/.claude/skills/fal-video/` and ffmpeg present locally. Both are checked in pre-flight.
 
@@ -17,13 +17,21 @@ Animated GIF generation by orchestrating fal-video (source clip) + ffmpeg (palet
 
 2. **Sibling-skill check.** Verify `$PWD/.claude/skills/fal-video/agents/brief-constructor.md` exists. If absent: "gif-maker depends on the fal-video skill being installed at `<project>/.claude/skills/fal-video/`. Install it (or copy from a project that has it) before continuing."
 
-3. **fal MCP discovery.** Use `ToolSearch` to find fal MCP tools (model listing, pricing, video-generation, file upload, async job management). **Do not hardcode tool names** — discover at runtime. If no fal MCP available: instruct user to register fal MCP in this project's `.claude/settings.json` and stop.
+3. **fal MCP discovery.** `ToolSearch` for `fal-ai` to confirm the 9 `mcp__fal-ai__*` tools are loaded (`recommend_model`, `get_pricing`, `get_model_schema`, `submit_job`, `check_job`, plus the rest). If absent, register via `claude mcp add --transport http --scope user fal-ai https://mcp.fal.ai/mcp --header "Authorization: Bearer <FAL_KEY>"` and restart. Tool flow + auth gotchas live in `references/fal-mcp-flow.md`.
 
-4. **ffmpeg presence check.** Run `ffmpeg -version` (or equivalent). If missing: "gif-maker needs ffmpeg locally. Install via `brew install ffmpeg` (macOS) / `apt install ffmpeg` (Debian) / `choco install ffmpeg` (Windows), then retry."
+4. **Allowlist (recommended).** Add `mcp__fal-ai` to `permissions.allow` in `.claude/settings.local.json` to skip per-call permission prompts — critical here, where the source-clip pipeline does one `submit_job` plus multiple `check_job` polls per GIF.
+
+5. **ffmpeg presence check.** Run `ffmpeg -version`. If missing: install via `brew install ffmpeg` (macOS) / `apt install ffmpeg` (Debian) / `choco install ffmpeg` (Windows), then retry.
 
 ---
 
-## Pipeline (11 steps)
+## Source-clip model
+
+Default endpoint: **`fal-ai/kling-video/v2.5-turbo/pro/text-to-video`** (or `.../image-to-video` when the user provides a source still). Cheap workhorse at ~$0.07/s — well-suited to GIFs since they discard audio anyway and rarely need premium fidelity. The user can override to Veo 3.1 (`fal-ai/veo3.1`) for hero or photographic intents that warrant the quality jump; the orchestrator surfaces the choice and cost in the pre-flight summary.
+
+---
+
+## Pipeline
 
 ### 1. Detect intent
 
@@ -40,7 +48,7 @@ From intent + preset + user overrides:
 - **width** — default 480px, override allowed (320 / 640 / 720 typical alternatives)
 - **max_colors** — 16–32 for loader/micro-animation, 64 for hero, 32–64 for decorative, 128 for photographic
 - **dither** — `bayer` for flat content, `floyd_steinberg` for photographic
-- **duration** — default model minimum (~5s); trim with ffmpeg `-t` if user wants shorter
+- **duration** — default model minimum (Kling supports 5s); trim with ffmpeg `-t` if user wants shorter
 - **aspect ratio** — per user intent (square for buttons / 16:9 for hero / vertical for stories)
 
 ### 4. Read source-clip-spec
@@ -51,44 +59,52 @@ Read `references/source-clip-spec.md`. Build the override-notes block from the t
 
 Use the `Task` tool with `subagent_type: "general-purpose"`. Wrapper prompt (substitute the actual absolute path computed from `$PWD`):
 
-> "Read `$PWD/.claude/skills/fal-video/agents/brief-constructor.md` and follow its instructions exactly. Then construct a prompt with these inputs: skill-root=`$PWD/.claude/skills/fal-video`, user request=<verbatim>, detected domain=<per intent mapping in strategy.md>, preset path=`$PWD/.claude/skills/fal-video/presets/<domain>.preset.md`, mode=generate, MCQ answers=none, custom override notes=<the GIF-aware block built in step 4>, target duration=<chosen source duration>, target fps=accept native — fps not controllable on most fal models. Your entire reply must be only the prompt string — nothing before, nothing after, no markdown fence, no explanation."
+> "Read `$PWD/.claude/skills/fal-video/agents/brief-constructor.md` and follow its instructions exactly. Then construct a prompt with these inputs: skill-root=`$PWD/.claude/skills/fal-video`, user request=<verbatim>, detected domain=<per intent mapping in strategy.md>, preset path=`$PWD/.claude/skills/fal-video/presets/<domain>.preset.md`, mode=generate, target_model=`kling-2.5-turbo-pro`, audio_enabled=false, MCQ answers=none, custom override notes=<the GIF-aware block built in step 4>, target duration=<chosen source duration>, target fps=accept native — fps not controllable on most fal models. Your entire reply must be only the prompt string — nothing before, nothing after, no markdown fence, no explanation."
 
-Capture the reply. Strip leading/trailing whitespace and any accidental code-fence wrapping. If reply starts with `BRIEF_FAILED:`, surface the reason and stop.
+Capture the reply. Pipe through `scripts/orchestrator.py: strip_preamble()` — defensively removes leading meta-narration the brief-constructor leaks past its contract. If reply starts with `BRIEF_FAILED:`, surface the reason and stop.
 
-### 6. Call fal MCP for source-clip generation
+### 6. Pre-flight summary
 
-- Default model: `fal-ai/ltx-video` ($0.02 flat). User override allowed (e.g., kling, runway).
-- Resolution: smallest tier the model exposes
-- Audio: off
-- Duration: model minimum (or user override if model supports it)
-- Aspect ratio: per intent
-- Prompt: brief-constructor's output
+Before submitting to fal, print a summary in chat:
 
-On transient failure (timeout, 5xx): one silent retry after 2 seconds. On second failure: report error, do not retry.
+- **Intent** — detected intent (loader / micro-animation / hero / decorative / photographic)
+- **Source model** — chosen endpoint + one-line reason ("Kling 2.5 Turbo Pro for cheap workhorse iteration")
+- **Source prompt** — the brief-constructor's output, in a code block
+- **GIF params** — fps, width, max colors, dither, duration
+- **Cost** — `get_pricing(endpoint_id)` estimate at the chosen duration
 
-### 7. Save source MP4
+Wait for user response. Proceed on confirmation. Adjust on redirect ("use Veo for premium", "shorter clip", "fewer colors").
 
-Compute slug from user request (per the slug derivation rules in fal-video's `references/outputs.md` — same conventions). Compute version by scanning `<cwd>/generated/gifs/<date>/` for existing `<slug>-vNN.gif`. Take max NN, increment +1. If none, use `v01`.
+### 7. Call fal MCP for source-clip generation
 
-Save the MP4 returned by fal to `<cwd>/generated/gifs/<date>/_source/<slug>-vNN-source.mp4`. mkdir `_source/` if missing. Underscore prefix sorts to bottom in date folder; the source MP4 is kept so the user can re-encode without re-paying fal.
+Source clips run 30–90s — **always use `submit_job` + `check_job` polling, never `run_model`**. Sync-poll times out unreliably while fal still queues the job, leaving an orphan you can't recover. Canonical sequence (full reference: `references/fal-mcp-flow.md`):
 
-### 8. Run ffmpeg two-pass palette pipeline
+1. `get_model_schema(endpoint_id)` → verify endpoint exists + read input params (halt if schema errors)
+2. `submit_job(endpoint_id, input)` → returns `{request_id}` IMMEDIATELY — capture and persist before anything else
+3. Poll `check_job(endpoint_id, request_id, action="status")` every 10–15s; when `status="completed"`, fetch `action="result"`
 
-Per `references/ffmpeg-commands.md`. Pass 1 generates palette PNG. Pass 2 applies palette + dither to produce GIF. Use the trim variant if user requested a shorter GIF than the source. Discard the intermediate palette PNG after pass 2.
+Default request: smallest resolution tier, audio off, model-minimum duration, aspect ratio per intent. User override allowed for model + duration only — other params locked. Capture `request_id` from the submit response into `params.request_id` immediately so the job is recoverable if the poll loop fails.
 
-### 9. Save GIF
+### 8. Save source MP4
+
+Use `scripts/orchestrator.py: slug_from_request()` and `next_version()` to compute slug + version. Save the MP4 to `<cwd>/generated/gifs/<date>/_source/<slug>-vNN-source.mp4` via `download_to_local()`. The underscore prefix sorts the source folder to bottom; the MP4 is kept so the user can re-encode without re-paying fal.
+
+### 9. Run ffmpeg two-pass palette pipeline
+
+Run the two-pass pipeline per `references/ffmpeg-commands.md`: `palettegen` → palette PNG, then `paletteuse` → final GIF. Capture both literal command strings into `params.ffmpeg_pass1` / `params.ffmpeg_pass2` so future re-encoding doesn't require re-running gif-maker. Discard the intermediate palette PNG after pass 2.
+
+### 10. Save GIF
 
 Final GIF lands at `<cwd>/generated/gifs/<date>/<slug>-vNN.gif`.
 
-### 10. Write JSON sidecar
+### 11. Write JSON sidecar
 
-At `<slug>-vNN.json` with these fields:
-- `request`, `slug`, `version`, `type: "gif"`, `skill: "gif-maker"`
-- `prompt` (brief-constructor's output)
-- `params.fal_model`, `params.source_duration_seconds`, `params.gif_fps`, `params.gif_width`, `params.gif_max_colors`, `params.gif_dither`, `params.intent`, `params.source_path` (relative to project root, points into `_source/`)
+At `<slug>-vNN.json` via `scripts/orchestrator.py: write_sidecar()` with these fields:
+- `request`, `slug`, `version`, `type: "gif"`, `skill: "gif-maker"`, `prompt` (brief-constructor output, post-strip)
+- `params.fal_model`, `params.model_choice_reason`, `params.preflight_confirmed`, `params.source_duration_seconds`, `params.gif_fps`, `params.gif_width`, `params.gif_max_colors`, `params.gif_dither`, `params.intent`, `params.source_path`, `params.request_id`, `params.ffmpeg_pass1`, `params.ffmpeg_pass2`
 - `cost_usd`, `timestamp` (ISO 8601 with offset), `duration_ms`, `output_path` (relative)
 
-### 11. Verify and report
+### 12. Verify and report
 
 Verify all three files exist with non-zero size: GIF + sidecar + source MP4. On any partial-write failure: echo full sidecar JSON to chat as fallback log; never delete the source MP4 (user paid for it).
 
@@ -100,28 +116,4 @@ In chat, output:
 
 ---
 
-## Cost transparency
-
-| Component | Cost |
-|---|---|
-| fal-video source clip (default `fal-ai/ltx-video`) | **$0.02 flat** |
-| ffmpeg palette + paletteuse (local) | **$0** |
-| **Total per GIF (default model)** | **$0.02** |
-
-Higher-quality fal models cost more — kling v2.1 standard is $0.25 for 5s. User opts in explicitly; cost is reported in chat after each generation.
-
----
-
-## Slug & versioning quick reference
-
-Same rules as fal-image / fal-video — per-slug-per-date, two-digit minimum, expand past v99. See fal-video's `references/outputs.md` for the full spec.
-
----
-
-## Hygiene
-
-- No emojis in any output (chat or files)
-- No meta-commentary in the prompt sent to fal
-- Prompt sent to fal is exactly what brief-constructor returned, after whitespace/fence strip — nothing added
-- No motion-speed manipulation (no `setpts`, no playback-speed dialing)
-- Color budget is intent-driven aesthetic guidance, never a literal "use N colors" prompt instruction
+No emojis. No meta-commentary. The prompt sent to fal-video's brief-constructor is exactly what's returned, post `strip_preamble()`. No motion-speed manipulation (no `setpts`, no playback-speed dialing). Color budget is intent-driven aesthetic guidance, never a literal "use N colors" prompt instruction.

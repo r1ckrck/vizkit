@@ -32,12 +32,12 @@ The slot is a **gap** if both message and preset are empty/`—` AND the brief-c
 
 | Gap count | MCQs to ask |
 |---:|---|
-| 0 | 0 content MCQs (still ask 1 model MCQ) |
-| 1 | 1 content MCQ + 1 model MCQ |
-| 2 | 2 content MCQs + 1 model MCQ |
-| 3+ | 2 content MCQs (highest-impact slots) + 1 model MCQ. Remaining gaps filled by brief-constructor inference. |
+| 0 | none — proceed straight to pre-flight |
+| 1 | 1 content MCQ |
+| 2 | 2 content MCQs |
+| 3+ | 2 content MCQs (highest-impact slots). Remaining gaps filled by brief-constructor inference. |
 
-**Cap: 3 MCQs total per request.** Never more. The model MCQ is always last.
+**Cap: 2 content MCQs per request.** The orchestrator picks the model itself from the roster — no model MCQ. The pre-flight summary surfaces the chosen model with its cost and reason, and the user can override there.
 
 **Priority order for picking the 2 MCQs when 3+ gaps:**
 
@@ -51,14 +51,13 @@ The slot is a **gap** if both message and preset are empty/`—` AND the brief-c
 
 ## Skip MCQs entirely when
 
-Skip even the model MCQ if **any** of these are true:
+Skip content MCQs if **any** of these are true:
 
 - User said **"just generate"** / **"go ahead"** / **"no questions"** / **"surprise me"**
 - User pasted a **fully-specified brief** (≥30 words covering subject + scene + style)
-- User explicitly named the model (still ask content MCQs if there are gaps; skip only the model MCQ)
-- This is a **batch follow-up** (subsequent calls in a batch series — they inherit the first call's answers)
+- This is a **batch follow-up** (subsequent calls in a batch series inherit the first call's answers)
 
-If user said "just generate", the orchestrator picks the recommended model and infers all gaps via brief-constructor.
+If user said "just generate", the orchestrator infers all gaps via brief-constructor and proceeds to the pre-flight summary.
 
 ---
 
@@ -157,49 +156,6 @@ Where's the scene?
 
 ---
 
-## Model MCQ (always last, always asked unless explicitly skipped)
-
-After content MCQs are answered (or skipped), the orchestrator asks the model question.
-
-### Source of options — runtime discovery
-
-The model list is **fetched at runtime from fal MCP**. Skills are model-agnostic: there is no hardcoded list. The orchestrator must:
-
-1. Discover the available fal MCP tools (use `ToolSearch` if needed to find them)
-2. Call the tool that lists or recommends image models, passing the detected domain + mode (generate / edit / upscale)
-3. Pull cost-per-call for each candidate via the appropriate fal MCP tool (often the same tool returns it; otherwise call separately)
-
-### Picking the 3 options to show
-
-Show **3 options** plus a "let me think" fallback:
-
-| Slot | Pick |
-|---|---|
-| (a) | Cheapest viable for this domain — often the draft tier |
-| (b) | Recommended quality for this domain — mark as **recommended** |
-| (c) | Premium tier — more expensive, higher fidelity |
-| (d) | Always: "let me think about it → defaults to recommended" |
-
-### Format
-
-```
-Model?
-   a) [model id] — $[cost] — [one-line rationale, e.g., "fast drafts, lowest cost"]
-   b) [model id] — $[cost] — [one-line rationale, e.g., "best quality for editorial portraits"] (recommended)
-   c) [model id] — $[cost] — [one-line rationale, e.g., "premium tier for hero imagery"]
-   d) let me think about it → defaults to recommended
-```
-
-If the user picks (d) or doesn't reply with a clear choice, use option (b) (the recommended).
-
-### Skip the model MCQ when
-
-- User explicitly named a model in their request
-- User said "just generate" / "go ahead" — use recommended silently
-- This is a batch follow-up — inherit the first call's model
-
----
-
 ## Rendering rule
 
 MCQs are rendered as **plain markdown in the chat**, NOT via the AskUserQuestion tool. The orchestrator outputs the question + options, the user replies in freeform.
@@ -236,7 +192,7 @@ Slot evaluation:
 - Composition: filled by preset (200mm, f/1.4, 4:3)
 - Style+Lighting: gap (no style cues, preset's lighting is default but mood/grading empty)
 
-Gap count: 2. Plan: 2 content MCQs + 1 model MCQ.
+Gap count: 2. Plan: 2 content MCQs.
 
 Priority order picks: Style+Lighting (1st), Action (2nd).
 
@@ -260,23 +216,14 @@ What's the chef doing?
    d) something else (describe)
 ```
 
-### Question 3 (Model):
-
-```
-Model?
-   a) [cheapest model] — $[cost] — fast drafts
-   b) [recommended model] — $[cost] — best quality for editorial portraits (recommended)
-   c) [premium model] — $[cost] — premium tier
-   d) let me think about it → defaults to recommended
-```
-
-User replies: *"a, c, b"* → orchestrator interprets as: warm/intimate mood + direct-to-camera action + recommended model.
+User replies: *"a, c"* → orchestrator interprets as: warm/intimate mood + direct-to-camera action.
 
 brief-constructor receives:
 - User request: "portrait of a chef in a kitchen"
 - Domain: Portrait
 - Preset path: ~/.claude/skills/fal-image/presets/portrait.preset.md
 - Mode: generate
-- MCQ answers: `{ style: "warm intimate Kinfolk-like", action: "direct-to-camera confident", model: "recommended" }`
+- Target model: nano-banana-pro (orchestrator's pick from the roster, surfaced in the pre-flight summary)
+- MCQ answers: `{ style: "warm intimate Kinfolk-like", action: "direct-to-camera confident" }`
 
 → proceeds to construct the prompt.

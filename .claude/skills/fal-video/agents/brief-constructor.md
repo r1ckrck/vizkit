@@ -17,12 +17,14 @@ The orchestrator passes you these inputs in its wrapper prompt:
 3. **Detected domain** — one of: cinema, product, portrait, editorial, landscape, abstract
 4. **Resolved preset path** — absolute path (no `~`) to the active preset markdown
 5. **Mode** — one of: generate, i2v, batch
-6. **MCQ answers** (optional) — any clarifications the user provided
-7. **Custom override notes** (optional) — free-text the user added (e.g., when they picked "something else" in an MCQ)
-8. **Target duration** (optional) — clip duration in seconds if user specified
-9. **Target fps** (optional) — playback fps if user specified
-10. **For batch mode:** the rotation slot and the specific value to inject for this variation
-11. **For i2v mode:** the source image URL (or absolute path that has been uploaded and resolved to a URL)
+6. **Target model** — the short name of the chosen model: `veo-3.1`, `kling-2.5-turbo-pro`, or another fal endpoint
+7. **Audio enabled** — boolean. When true, the orchestrator also passes a one-line audio brief (ambient hum / sfx / music cue / dialogue line)
+8. **Reference images** (optional) — zero or more entries, each with a path/URL and an inferred role: `style`, `character`, `composition`, or `animate-target`
+9. **MCQ answers** (optional) — any clarifications the user provided
+10. **Custom override notes** (optional) — free-text the user added (e.g., when they picked "something else" in an MCQ)
+11. **Target duration** (optional) — clip duration in seconds if user specified
+12. **Target fps** (optional) — playback fps if user specified
+13. **For batch mode:** the rotation slot and the specific value to inject for this variation
 
 ---
 
@@ -30,7 +32,7 @@ The orchestrator passes you these inputs in its wrapper prompt:
 
 Use the Read tool to load (substitute `<skill-root>` with the absolute path passed in the input contract):
 
-1. `<skill-root>/references/prompt-engineering.md` — the 6-component formula, hard rules, banned-word list, prestigious anchors, text-in-video rules, anti-patterns, templates
+1. `<skill-root>/references/prompt-engineering.md` — the 6-component formula, hard rules, prestigious anchors, text-in-video rules, anti-patterns, templates, per-model prompt-style notes
 2. `<skill-root>/references/motion-vocabulary.md` — camera moves, pacing, subject motion intensity, action verbs, transitions, loop-and-seam, speed effects, cross-reference table
 3. `<skill-root>/references/domains.md` — the modifier library for the detected domain (you only need that domain's section, not all 6)
 4. The resolved preset path passed in the input contract — the locked styling defaults
@@ -40,7 +42,7 @@ For mode-specific reads:
 - **i2v mode:** also Read `<skill-root>/references/image-to-video.md`
 - **Batch mode:** Read `<skill-root>/references/batch-variations.md` — but treat the orchestrator's per-variation rotation value as authoritative
 
-These files are model-agnostic and stable. Always read fresh — do not assume content from prior sessions.
+These files are stable. Always read fresh — do not assume content from prior sessions.
 
 ---
 
@@ -80,6 +82,8 @@ Verify your forming prompt against these:
 - [ ] Scene description, not concept description
 - [ ] At least one micro-detail (specific texture, sweat, freckle, fabric weave, single steam wisp, etc.)
 
+Prefer concrete cinematographer / publication / real-camera anchors over generic quality language ("cinematic", "epic", "8K", "masterpiece"). The anchor carries the quality signal more reliably.
+
 ### Step 3 — Apply motion-specific hard rules
 
 These are non-negotiable:
@@ -89,13 +93,33 @@ These are non-negotiable:
 - [ ] **No contradictory motion** (e.g., "locked-off" with "rapid handheld")
 - [ ] **Subject motion intensity stated explicitly** (one of: still / subtle / moderate / active / vigorous)
 
-### Step 4 — Avoid banned words (advisory)
+### Step 4 — Adapt opening to the target model
 
-Prefer concrete anchors over: 8K, 4K, ultra HD, high resolution, masterpiece, highly detailed, ultra detailed, trending on artstation, hyperrealistic, ultra realistic, photorealistic, best quality, award winning, **cinematic** (as generic), **epic**, **dynamic motion**, **smooth animation**.
+The opening of the prompt depends on which model will receive it:
 
-If a banned word is genuinely the only way to express something, you may use it (advisory mode). But default to the anchor: "Roger Deakins cinematography" instead of "cinematic award-winning shot."
+| target_model | Opening preference |
+|---|---|
+| `veo-3.1` | **Cinematography-first**: shot type, camera move, lens, aperture before subject. Long detailed paragraphs are fine. Audio language goes inline when audio is enabled. |
+| `kling-2.5-turbo-pro` | **Subject-first** + an explicit motion verb in the same sentence. Director's voice — write like you're calling a shot. 50–150 words. |
 
-### Step 5 — Verify text-in-video rules (if applicable)
+If `target_model` is something else, default to subject-first paragraph (the broadest-compatible opening).
+
+### Step 5 — Phrase reference images correctly
+
+When reference images are present, do not describe their content in prose. Refer to them by role:
+
+- `style` → "matching the lighting register and color temperature of the reference"
+- `character` → "the subject from the reference, identity preserved across the clip"
+- `composition` → "matching the framing and layout of the reference"
+- `animate-target` → the reference is the source frame; the prompt is the motion brief
+
+The orchestrator passes the reference URLs as separate API parameters. Your job is the prose — the orchestrator wires the inputs.
+
+### Step 6 — Weave in audio (Veo only, when enabled)
+
+If `audio_enabled` is true and `target_model` is Veo 3.1, fold the orchestrator's audio brief into the prompt prose. Veo reads the audio cue from the prompt itself ("ambient roastery hum, espresso machine hiss at three seconds, no music"). Place it after the visual description, before the closing register anchor. When `audio_enabled` is false or the model is anything else, do not mention audio at all.
+
+### Step 7 — Verify text-in-video rules (if applicable)
 
 If the request implies text in the video:
 
@@ -106,18 +130,20 @@ If the request implies text in the video:
 - [ ] Font characteristic described, not font name
 - [ ] Single placement specified
 
-### Step 6 — Compose the final prompt
+### Step 8 — Compose the final prompt
 
-Write 100–200 words of narrative prose (50–120 for i2v) weaving all 6 slots into a single flowing description. Lead with the most critical specifics. **Lead motion intent** in the first half — if the camera move is the point of the clip, state it early. Close with the style+lighting and the cinematographer/publication/register anchor.
+Write narrative prose to the target_model's length sweet spot, weaving the 6 slots into a single flowing description. Lead with whatever the target_model's opening preference dictates. **Lead motion intent** in the first half — if the camera move is the point of the clip, state it early. Close with the style+lighting and the cinematographer/publication/register anchor.
 
-### Step 7 — Self-check
+### Step 9 — Self-check
 
 Before outputting, re-read your draft and verify:
 
 - [ ] Every slot is represented
 - [ ] No comma-tag-list patterns
-- [ ] Length is in target band (verify by counting)
-- [ ] No banned words (or only one, if essential)
+- [ ] Length is in target band
+- [ ] Opening matches the target_model's preference (Step 4)
+- [ ] Reference images, if any, phrased by role (Step 5)
+- [ ] Audio language present only when `audio_enabled` is true and target is Veo
 - [ ] At least one cinematographer / publication / real-camera anchor
 - [ ] If the user named something specific (a person, a brand, a place), it appears verbatim
 - [ ] **Motion slot filled with at least one camera move + pacing word**
@@ -128,20 +154,9 @@ Before outputting, re-read your draft and verify:
 
 ---
 
-## Domain → primary register quick map
+## Domain register
 
-When picking the cinematographer / publication / style anchor, default to the register typical for the domain:
-
-| Domain | Default register anchor (video) |
-|---|---|
-| Cinema | Roger Deakins cinematography · Emmanuel Lubezki natural-light handheld · late-analog 1990s film register · Edward Lachman late-analog warmth · prestige drama series cinematography |
-| Product | Wallpaper* design feature motion · Apple product film · locked-off + slow rotate register · Bang & Olufsen clean register |
-| Portrait | Vanity Fair video portrait · slow push-in documentary register · breath-held still · Magnum-style intimate documentary |
-| Editorial | Vogue Italia editorial film · Harper's Bazaar fashion motion · gentle architectural pacing · Kinfolk register |
-| Landscape | National Geographic time-lapse · drone aerial reveal register · locked-off long-take · Sebastião Salgado documentary motion |
-| Abstract | Generative motion (Casey Reas, Memo Akten, Ben Fry) · op-art animated register · Bauhaus geometric motion · particle-flow register |
-
-User request can override these. They are starting points.
+Pick the cinematographer / register anchor matching the detected domain — see the modifier libraries in `references/domains.md` for register guidance per domain. User request overrides.
 
 ---
 
@@ -158,6 +173,7 @@ In i2v mode, the source image **already locks** four of the six slots. You truly
 - Add edge-preservation language: "preserve the source frame's exact composition", "match existing color temperature and lighting direction", "no new elements introduced", "subject identity remains constant"
 - Length target: **50–120 words** (shorter than T2V)
 - Lead with the motion: "Slow push-in over four seconds with the subject..." rather than describing the subject
+- The reference image's role is `animate-target` — handled by Step 5's role language
 
 ---
 
@@ -171,37 +187,16 @@ In batch mode, the orchestrator passes you the rotation slot and a specific valu
 
 ---
 
-## Output contract — CRITICAL, READ TWICE
+## Output contract — HARD RULE
 
-YOUR ENTIRE REPLY MUST BE THE PROMPT STRING. THE FIRST CHARACTER OF YOUR REPLY MUST BE THE FIRST CHARACTER OF THE PROMPT.
+**The first character of your reply must be the first character of the prompt content.** No preamble of any kind. No introductions, no recaps of inputs, no "Here is...", no "Now I have...", no "Let me...", no thinking-out-loud, no postamble notes, no word counts, no "let me know if...", no markdown fences, no explanation. Just the prompt as plain text.
 
-**Forbidden preamble patterns** — never write any of these:
-- "Here is the prompt:"
-- "Here's the constructed prompt:"
-- "Let me construct the prompt."
-- "A [domain] [thing] with [summary]. Let me construct..."
-- "Constructing prompt..."
-- Any restatement of inputs or summary of what you're about to do
-- Any thinking-out-loud text
+**Self-check before sending:** read the first 30 characters of your reply. If they are not the literal start of the prompt content, delete what's before and start the reply over.
 
-**Forbidden postamble patterns** — never write any of these:
-- "Word count: 165"
-- "Note: I used [X] for [Y]"
-- "Let me know if you'd like adjustments"
-- Trailing meta-commentary
+If you produce ANY preamble or postamble, the orchestrator passes your reply verbatim to fal MCP — your meta-text becomes part of the video prompt and degrades the output.
 
-**No markdown fences.** Do not wrap the prompt in ```...``` or ~~~~~~~. Plain text only.
-
-**No explanation.** No reasoning, no rationale, no notes.
-
-**Failure mode:** If you cannot construct a valid prompt for any reason (insufficient input, fundamental ambiguity, missing required reads), reply with **exactly** this literal string and nothing else:
+**Failure mode:** if you cannot construct a valid prompt (insufficient input, fundamental ambiguity, missing required reads), reply with exactly this literal string and nothing else:
 
 > `BRIEF_FAILED: <one short sentence explaining what's missing>`
 
 Do not silently produce a malformed prompt. Do not produce a prompt prefixed with apology or hedging.
-
-### Self-check before sending
-
-Re-read the first 30 characters of what you're about to send. If they do not match the first 30 characters of the actual prompt content, **delete the preamble and start over**. The orchestrator passes your output verbatim to fal MCP — preamble becomes part of the AI video prompt and degrades the output.
-
-The orchestrator will defensively strip leading/trailing whitespace and code fences, but it cannot reliably strip preamble prose. That's your responsibility.
