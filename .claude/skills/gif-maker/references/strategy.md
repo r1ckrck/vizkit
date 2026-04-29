@@ -76,6 +76,20 @@ When gif-maker spawns fal-video's brief-constructor, it must pick a fal-video do
 
 ---
 
+## Source-clip model per intent
+
+| Intent | Default source model | When to opt into premium (Veo 3.1) |
+|---|---|---|
+| **loader** | Kling 2.5 Turbo Pro | Rarely — loaders don't need cinematic fidelity |
+| **micro-animation** | Kling 2.5 Turbo Pro | Rarely |
+| **hero** | Kling 2.5 Turbo Pro | When the user explicitly asks for premium photoreal motion |
+| **decorative** | Kling 2.5 Turbo Pro | Rarely |
+| **photographic** | Kling 2.5 Turbo Pro | When the user explicitly asks for cinematic realism — Veo's natural-light handheld is noticeably better here |
+
+GIFs strip audio, so Veo's biggest feature (native audio) is wasted. Reserve Veo for the rare case where the visual fidelity jump is worth ~5× the cost.
+
+---
+
 ## Worked examples — intent classification
 
 | User request | Intent | fal-video domain | Color budget | Dither |

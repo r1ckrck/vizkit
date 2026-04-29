@@ -33,14 +33,14 @@ The slot is a **gap** if both message and preset are empty/`—` AND the brief-c
 
 | Gap count | MCQs to ask |
 |---:|---|
-| 0 | 0 content MCQs (still ask 1 model MCQ) |
-| 1 | 1 content MCQ + 1 model MCQ |
-| 2 | 2 content MCQs + 1 model MCQ |
-| 3+ | 2 content MCQs (highest-impact slots) + 1 model MCQ. Remaining gaps filled by brief-constructor inference. |
+| 0 | none — proceed straight to pre-flight |
+| 1 | 1 content MCQ |
+| 2 | 2 content MCQs |
+| 3+ | 2 content MCQs (highest-impact slots). Remaining gaps filled by brief-constructor inference. |
 
-**Cap: 3 MCQs total per request.** Never more. The model MCQ is always last.
+**Cap: 2 content MCQs per request.** The orchestrator picks the model itself from the roster — no model MCQ. The pre-flight summary surfaces the chosen model with its cost and reason, and the user can override there.
 
-**Priority order for picking the 2 MCQs when 3+ gaps (revised for video):**
+**Priority order for picking the 2 MCQs when 3+ gaps:**
 
 1. **Motion** — highest video-specific impact; bad motion language tanks the clip
 2. **Style + Lighting** — second highest visual impact
@@ -53,14 +53,13 @@ The slot is a **gap** if both message and preset are empty/`—` AND the brief-c
 
 ## Skip MCQs entirely when
 
-Skip even the model MCQ if **any** of these are true:
+Skip content MCQs if **any** of these are true:
 
 - User said **"just generate"** / **"go ahead"** / **"no questions"** / **"surprise me"**
 - User pasted a **fully-specified brief** (≥30 words covering subject + scene + motion + style)
-- User explicitly named the model (still ask content MCQs if there are gaps; skip only the model MCQ)
-- This is a **batch follow-up** (subsequent calls in a batch series — they inherit the first call's answers)
+- This is a **batch follow-up** (subsequent calls in a batch series inherit the first call's answers)
 
-If user said "just generate", the orchestrator picks the recommended model and infers all gaps via brief-constructor.
+If user said "just generate", the orchestrator infers all gaps via brief-constructor and proceeds to the pre-flight summary.
 
 ---
 
@@ -196,49 +195,6 @@ Where's the scene?
 
 ---
 
-## Model MCQ (always last, always asked unless explicitly skipped)
-
-After content MCQs are answered (or skipped), the orchestrator asks the model question.
-
-### Source of options — runtime discovery
-
-The model list is **fetched at runtime from fal MCP**. Skills are model-agnostic: there is no hardcoded list. The orchestrator must:
-
-1. Discover the available fal MCP tools (use `ToolSearch` if needed to find them)
-2. Call the tool that lists or recommends video models, passing the detected domain + mode (generate / i2v / batch)
-3. Pull cost-per-call (or cost-per-second) for each candidate via the appropriate fal MCP tool
-
-### Picking the 3 options to show
-
-Show **3 options** plus a "let me think" fallback:
-
-| Slot | Pick |
-|---|---|
-| (a) | Cheapest viable for this domain (e.g., ltx-video for short clips) |
-| (b) | Recommended quality for this domain — mark as **recommended** |
-| (c) | Premium tier — more expensive, higher fidelity |
-| (d) | Always: "let me think about it → defaults to recommended" |
-
-### Format
-
-```
-Model?
-   a) [model id] — $[cost] — [one-line rationale, e.g., "fast drafts, lowest cost — ltx-video flat $0.02"]
-   b) [model id] — $[cost] — [one-line rationale, e.g., "best quality for cinematic portraits"] (recommended)
-   c) [model id] — $[cost] — [one-line rationale, e.g., "premium tier for hero clips"]
-   d) let me think about it → defaults to recommended
-```
-
-If the user picks (d) or doesn't reply with a clear choice, use option (b) (the recommended).
-
-### Skip the model MCQ when
-
-- User explicitly named a model in their request
-- User said "just generate" / "go ahead" — use recommended silently
-- This is a batch follow-up — inherit the first call's model
-
----
-
 ## Rendering rule
 
 MCQs are rendered as **plain markdown in the chat**, NOT via the AskUserQuestion tool. The orchestrator outputs the question + options, the user replies in freeform.
@@ -276,7 +232,7 @@ Slot evaluation:
 - Motion: gap (preset has `slow push-in or locked-off` but two options — count as a soft gap; also user gave no motion cue)
 - Style+Lighting: gap (no style cues, preset's lighting is default but mood/grading empty)
 
-Gap count: 3. Plan: 2 content MCQs + 1 model MCQ. Priority pick: **Motion (1st)**, Style+Lighting (2nd).
+Gap count: 3. Plan: 2 content MCQs. Priority pick: **Motion (1st)**, Style+Lighting (2nd).
 
 ### Question 1 (Motion):
 
@@ -299,23 +255,15 @@ What's the mood?
    d) something else (describe)
 ```
 
-### Question 3 (Model):
-
-```
-Model?
-   a) [cheapest model] — $[cost] — fast drafts
-   b) [recommended model] — $[cost] — best quality for portrait clips (recommended)
-   c) [premium model] — $[cost] — premium tier
-   d) let me think about it → defaults to recommended
-```
-
-User replies: *"b, c, b"* → orchestrator interprets as: slow push-in motion + moody cinematic style + recommended model.
+User replies: *"b, c"* → orchestrator interprets as: slow push-in motion + moody cinematic style.
 
 brief-constructor receives:
 - User request: "video portrait of a chef in a kitchen"
 - Domain: Portrait
 - Preset path: `<project>/.claude/skills/fal-video/presets/portrait.preset.md`
 - Mode: generate
-- MCQ answers: `{ motion: "slow push-in", style: "moody cinematic Roger Deakins prestige drama", model: "recommended" }`
+- Target model: veo-3.1 (orchestrator's pick from the roster, surfaced in the pre-flight summary)
+- Audio enabled: false
+- MCQ answers: `{ motion: "slow push-in", style: "moody cinematic Roger Deakins prestige drama" }`
 
 → proceeds to construct the prompt with all 6 slots filled.

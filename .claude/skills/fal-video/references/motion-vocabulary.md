@@ -154,7 +154,7 @@ Loop-friendly clips share start and end frames so they can repeat seamlessly.
 
 | Technique | Description | When to use |
 |---|---|---|
-| **Start frame ≈ end frame** | The first and last frame are visually identical (or near-identical). | All loop-friendly clips · gif-maker source clips |
+| **Start frame ≈ end frame** | The first and last frame are visually identical (or near-identical). | Loop-friendly clips · downstream GIF source material |
 | **Seamless wraparound** | Motion direction at end matches motion direction at start. | Drift loops · particle flow · abstract patterns |
 | **Drift-and-return** | Motion drifts in one direction, then returns to origin. | Subtle product loops · breathing portraits |
 | **Pulse-cycle** | Motion expands and contracts on a fixed cycle (like a heartbeat). | Abstract motion · UI / micro-animation feel |

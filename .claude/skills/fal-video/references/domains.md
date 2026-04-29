@@ -1,6 +1,6 @@
 # Domains — fal-video
 
-The 6 video domains: how to detect them from a user request, and the vocabulary library to draw from when constructing the prompt for each. Adapted from the fal-image domain set; UI / Logo / Infographic are excluded because they don't translate meaningfully into motion.
+The 6 video domains: how to detect them from a user request, and the vocabulary library to draw from when constructing the prompt for each. UI / Logo / Infographic are excluded because they don't translate meaningfully into motion.
 
 ---
 

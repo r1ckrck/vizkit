@@ -10,22 +10,24 @@ gif-maker passes these to the fal MCP video-generation tool unless the user over
 
 | Parameter | Default | Rationale |
 |---|---|---|
-| **Model** | `fal-ai/ltx-video` | Cheapest by 10× ($0.02 flat per video). Quality is sufficient for color-reduced GIF output. User can override with another fal-video model (kling, runway) if hero-tier quality is needed. |
-| **Duration** | Model minimum (~5s for ltx-video) | Can't request shorter than the model's floor. If user wants ≤3s, trim locally with ffmpeg `-t` (see "Trimming for short GIFs" below). fps doesn't affect cost — only seconds do. |
+| **Model** | `fal-ai/kling-video/v2.5-turbo/pro/text-to-video` (or `.../image-to-video` when a source still is provided) | Cheap workhorse at ~$0.07/s. Quality is more than sufficient for color-reduced GIF output, and motion fidelity beats older models comfortably. User can opt into Veo 3.1 (`fal-ai/veo3.1`) when premium photoreal motion is worth the cost jump (~5×). |
+| **Duration** | Model minimum (5s on Kling 2.5 Turbo Pro) | Can't request shorter than the model's floor. If user wants ≤3s, trim locally with ffmpeg `-t` (see "Trimming for short GIFs" below). fps doesn't affect cost — only seconds do. |
 | **Resolution** | Smallest tier the chosen model exposes | The GIF will be scaled to 480px wide anyway. Lower source resolution = cheaper without quality loss for the final output. |
 | **Audio** | Always **off** | Irrelevant for GIF. Saves any audio surcharge on capable models. |
 | **Aspect ratio** | Per user intent | Square for buttons / loaders · 16:9 for hero · vertical for stories. |
 | **fps** | Accept native | fps is not controllable on most fal models. Whatever the model outputs (~24–30fps) gets downsampled with ffmpeg to GIF target fps (10 default). |
 
+> **Submission:** use `submit_job` + `check_job` polling, never `run_model`. Video generation runs 30–90s and the sync pattern times out unreliably. Pattern + recovery in `references/fal-mcp-flow.md`.
+
 ### Source-clip overrides users can request
 
-- **Model** — "use kling for this hero gif" / "use runway" → swap the model param. Cost goes up; report it.
+- **Model** — "use Veo for this hero gif" → swap the model param to `fal-ai/veo3.1`. Cost goes up substantially; the pre-flight summary surfaces it before submission.
 - **Duration** — "make it 3 seconds" → set duration=3 if the model accepts it; otherwise use model min and trim with ffmpeg post-fal.
 - **Aspect ratio** — "vertical" / "16:9" / "square" → set the aspect_ratio param.
 
 ### Locked-out: things users cannot override
 
-- **Audio** — always off in v1. Saves cost. Re-evaluate empirically later.
+- **Audio** — always off. GIFs strip audio anyway, and audio surcharges on capable models add cost for nothing.
 - **Source resolution** — always smallest tier. Higher res wastes money since GIF gets downsized to 480px anyway.
 
 ---
@@ -144,7 +146,7 @@ Example output (~140 words):
 
 ### Step 5 — gif-maker calls fal MCP
 
-Model: `fal-ai/ltx-video`
+Model: `fal-ai/kling-video/v2.5-turbo/pro/text-to-video`
 Aspect ratio: 1:1
 Resolution: smallest tier
 Audio: off
@@ -167,6 +169,6 @@ ffmpeg pipeline runs with:
 
 Output: `generated/gifs/2026-04-26/dashboard-loader-spinner-v01.gif` + `.json` sidecar.
 
-Cost reported: **$0.02** (ltx-video flat) + $0 ffmpeg = $0.02 total.
+Cost reported: **~$0.35** (Kling 2.5 Turbo Pro at 5s) + $0 ffmpeg.
 
 Refinement suggestion offered: *"want it tinier (320px) or with even fewer colors (8)?"*

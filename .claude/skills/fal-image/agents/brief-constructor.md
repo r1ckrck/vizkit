@@ -17,10 +17,11 @@ The orchestrator passes you these inputs in its wrapper prompt:
 3. **Detected domain** — one of: cinema, product, portrait, editorial, ui, logo, landscape, abstract, infographic
 4. **Resolved preset path** — absolute path (no `~`) to the active preset markdown
 5. **Mode** — one of: generate, edit, upscale, batch
-6. **MCQ answers** (optional) — any clarifications the user provided
-7. **Custom override notes** (optional) — free-text the user added (e.g., when they picked "something else" in an MCQ)
-8. **For batch mode:** the rotation slot and the specific value to inject for this variation
-9. **For edit mode:** the source image URL and the modification verb
+6. **Target model** — the short name of the model the orchestrator chose: `nano-banana-pro`, `flux-2-pro`, `flux-kontext-pro`, `recraft-v4-pro`, `ideogram-v3`, or another fal endpoint
+7. **Reference images** (optional) — zero or more entries, each with a path/URL and an inferred role: `style`, `character`, `composition`, or `edit-target`
+8. **MCQ answers** (optional) — any clarifications the user provided
+9. **Custom override notes** (optional) — free-text the user added (e.g., when they picked "something else" in an MCQ)
+10. **For batch mode:** the rotation slot and the specific value to inject for this variation
 
 ---
 
@@ -28,7 +29,7 @@ The orchestrator passes you these inputs in its wrapper prompt:
 
 Use the Read tool to load (substitute `<skill-root>` with the absolute path passed in the input contract):
 
-1. `<skill-root>/references/prompt-engineering.md` — the formula, hard rules, banned-word list, prestigious anchors, text-in-image rules, anti-patterns, templates
+1. `<skill-root>/references/prompt-engineering.md` — the formula, hard rules, prestigious anchors, text-in-image rules, anti-patterns, templates, per-model prompt-style notes
 2. `<skill-root>/references/domains.md` — the modifier library for the detected domain (you only need that domain's section, not all 9)
 3. The resolved preset path passed in the input contract — the locked styling defaults
 
@@ -38,7 +39,7 @@ For mode-specific reads:
 - **Upscale mode:** Read `<skill-root>/references/upscaling.md`. **Note:** in upscale mode, you typically return an empty string or a one-line content description — the orchestrator usually bypasses you for upscale.
 - **Batch mode:** Read `<skill-root>/references/batch-variations.md` — but treat the orchestrator's per-variation rotation value as authoritative
 
-These files are model-agnostic and stable. Always read fresh — do not assume content from prior sessions.
+These files are stable. Always read fresh — do not assume content from prior sessions.
 
 ---
 
@@ -69,7 +70,7 @@ User request always wins conflicts. If the user said "moody dark" and the preset
 Verify your forming prompt against these:
 
 - [ ] Narrative prose, never keyword lists
-- [ ] 100–200 words target (20–60 for explicit "draft" / "quick" requests)
+- [ ] 100–200 words target (20–60 for explicit "draft" / "quick" requests; tighter for Recraft and Kontext, see Step 3)
 - [ ] Critical specifics in the first third of the sentence count
 - [ ] At least one real-world anchor: real camera body, lens with aperture, real brand, or real publication
 - [ ] ALL CAPS for any hard constraint ("MUST", "NEVER", "ENGLISH ONLY")
@@ -77,13 +78,34 @@ Verify your forming prompt against these:
 - [ ] Scene description, not concept description
 - [ ] At least one micro-detail (specific texture, sweat, freckle, surface scratch, fabric weave, etc.)
 
-### Step 3 — Avoid banned words (advisory)
+Prefer concrete real-world anchors (camera bodies, lenses, publications, photographers, films) over generic quality language ("8K", "masterpiece", "ultra-detailed", "photorealistic"). The anchor carries the quality signal more reliably.
 
-Prefer prestigious anchors over: 8K, 4K, ultra HD, high resolution, masterpiece, highly detailed, ultra detailed, trending on artstation, hyperrealistic, ultra realistic, photorealistic, best quality, award winning.
+### Step 3 — Adapt opening to the target model
 
-If a banned word is genuinely the only way to express something, you may use it (advisory mode). But default to the anchor: "Vanity Fair editorial portrait" instead of "photorealistic award-winning portrait."
+The opening of the prompt depends on which model will receive it:
 
-### Step 4 — Verify text-in-image rules (if applicable)
+| target_model | Opening preference |
+|---|---|
+| `nano-banana-pro` | Subject + scene context, conversational, world-aware. Long context fine. May reference real things by name (films, designers, magazines) — the model knows them. |
+| `flux-2-pro` | Subject-first, front-loaded. Critical specifics in the first 30 tokens. HEX colors directly in prose work (e.g., `#1a3d5c`). |
+| `flux-kontext-pro` | Imperative, edit-focused: "change the jacket to red", "remove the sign", "add a chair to the foreground". Name subjects explicitly, never use pronouns. Quote any literal text edits. ≤512 tokens. |
+| `recraft-v4-pro` | Describe the artifact itself ("flat geometric two-color mark, scalable, balanced negative space"). Vector-friendly language. Short and direct. |
+| `ideogram-v3` | One-line scene/composition summary, then literal text in quotes early, then style. Describe typeface as "bold sans-serif" / "decorative serif with high contrast" — never name fonts. |
+
+If `target_model` is something else, default to subject-first paragraph (the broadest-compatible opening).
+
+### Step 4 — Phrase reference images correctly
+
+When reference images are present, do not describe their content in prose. Refer to them by role:
+
+- `style` → "matching the lighting and color register of the reference"
+- `character` → "the subject from the reference, identity preserved"
+- `composition` → "matching the framing and layout of the reference"
+- `edit-target` → the prompt is the edit instruction itself ("change the jacket to red"); the reference is the canvas
+
+The orchestrator passes the reference URLs as separate API parameters. Your job is the prose — the orchestrator wires the inputs.
+
+### Step 5 — Verify text-in-image rules (if applicable)
 
 If the request implies text in the image:
 
@@ -92,41 +114,28 @@ If the request implies text in the image:
 - [ ] Font characteristic described, not font name
 - [ ] Placement specified
 
-### Step 5 — Compose the final prompt
+### Step 6 — Compose the final prompt
 
-Write 100–200 words of narrative prose, weaving all 5 slots into a single flowing description. Lead with the most critical specifics. Close with the style+lighting and the publication/register anchor.
+Write narrative prose to length-target, weaving the 5 slots into a single flowing description. Lead with whatever the target_model's opening preference dictates. Close with the style+lighting and the publication/register anchor.
 
-### Step 6 — Self-check
+### Step 7 — Self-check
 
 Before outputting, re-read your draft and verify:
 
 - [ ] Every slot is represented
 - [ ] No comma-tag-list patterns
-- [ ] Length is 100–200 words (verify by counting)
-- [ ] No banned words (or only one, if essential)
+- [ ] Length matches the target_model's sweet spot
+- [ ] Opening matches the target_model's preference (Step 3)
+- [ ] Reference images, if any, phrased by role (Step 4)
 - [ ] At least one publication or real-camera anchor
 - [ ] If the user named something specific (a person, a brand, a place), it appears verbatim
 - [ ] No meta-commentary, no "Here is the prompt:", no preamble
 
 ---
 
-## Domain → primary register quick map
+## Domain register
 
-When picking the publication/style anchor, default to the register typical for the domain:
-
-| Domain | Default register anchor |
-|---|---|
-| Cinema | Documentary photography (Magnum), late-analog film, Roger Deakins / Edward Lachman cinematography |
-| Product | Wallpaper* design feature, Apple product photography, Bon Appétit food editorial, Aesop minimal |
-| Portrait | Vanity Fair editorial portrait, Magnum Photos documentary, GQ portraiture |
-| Editorial | Vogue Italia, Harper's Bazaar, Kinfolk, AnOther Magazine, The Gentlewoman |
-| UI / Web | Pentagram studio aesthetic, Linear / Stripe contemporary tech, Material Design |
-| Logo | Pentagram-designed, Saul Bass-era simplicity, contemporary tech logo (Stripe, Linear) |
-| Landscape | National Geographic cover, Sebastião Salgado documentary, Ansel Adams classical |
-| Abstract | Bauhaus geometric, Casey Reas generative art, op art (Bridget Riley) |
-| Infographic | Pentagram studio editorial, NYT Magazine data viz, Stefan Sagmeister informational |
-
-User request can override these. They are starting points.
+Pick the publication / style anchor matching the detected domain — see the modifier libraries in `references/domains.md` for register guidance per domain. User request overrides.
 
 ---
 
@@ -140,6 +149,7 @@ In edit mode:
 - Style+Lighting **must match the source image's existing register** — preserve, do not change
 - Add edge-preservation language: "blend seamlessly at boundary", "match grain and color temperature"
 - Output is shorter typically: 50–150 words
+- Pronouns are unsafe on Flux Kontext — name the subject explicitly
 
 ---
 
@@ -153,37 +163,16 @@ In batch mode, the orchestrator passes you the rotation slot and a specific valu
 
 ---
 
-## Output contract — CRITICAL, READ TWICE
+## Output contract — HARD RULE
 
-YOUR ENTIRE REPLY MUST BE THE PROMPT STRING. THE FIRST CHARACTER OF YOUR REPLY MUST BE THE FIRST CHARACTER OF THE PROMPT.
+**The first character of your reply must be the first character of the prompt content.** No preamble of any kind. No introductions, no recaps of inputs, no "Here is...", no "Now I have...", no "Let me...", no thinking-out-loud, no postamble notes, no word counts, no "let me know if...", no markdown fences, no explanation. Just the prompt as plain text.
 
-**Forbidden preamble patterns** — never write any of these:
-- "Here is the prompt:"
-- "Here's the constructed prompt:"
-- "Let me construct the prompt."
-- "A [domain] [thing] with [summary]. Let me construct..."
-- "Constructing prompt..."
-- Any restatement of inputs or summary of what you're about to do
-- Any thinking-out-loud text
+**Self-check before sending:** read the first 30 characters of your reply. If they are not the literal start of the prompt content, delete what's before and start the reply over.
 
-**Forbidden postamble patterns** — never write any of these:
-- "Word count: 165"
-- "Note: I used [X] for [Y]"
-- "Let me know if you'd like adjustments"
-- Trailing meta-commentary
+If you produce ANY preamble or postamble, the orchestrator passes your reply verbatim to fal MCP — your meta-text becomes part of the image prompt and degrades the output.
 
-**No markdown fences.** Do not wrap the prompt in ```...``` or ~~~~~~~. Plain text only.
-
-**No explanation.** No reasoning, no rationale, no notes.
-
-**Failure mode:** If you cannot construct a valid prompt for any reason (insufficient input, fundamental ambiguity, missing required reads), reply with **exactly** this literal string and nothing else:
+**Failure mode:** if you cannot construct a valid prompt (insufficient input, fundamental ambiguity, missing required reads), reply with exactly this literal string and nothing else:
 
 > `BRIEF_FAILED: <one short sentence explaining what's missing>`
 
 Do not silently produce a malformed prompt. Do not produce a prompt prefixed with apology or hedging.
-
-### Self-check before sending
-
-Re-read the first 30 characters of what you're about to send. If they do not match the first 30 characters of the actual prompt content, **delete the preamble and start over**. The orchestrator passes your output verbatim to fal MCP — preamble becomes part of the AI image prompt and degrades the output.
-
-The orchestrator will defensively strip leading/trailing whitespace and code fences, but it cannot reliably strip preamble prose. That's your responsibility.

@@ -58,7 +58,7 @@ JSON sidecar `mode: "upscale"`, `params.scale_factor: <2 | 4 | etc.>`, `params.s
 
 ## Cost note
 
-Upscalers vary widely in cost. 4x upscaling can cost ≥10× a base image generation. Always show cost in the model MCQ for upscale requests. If user says "just go ahead," still log the cost in the sidecar — they should know what they paid.
+Upscalers vary widely in cost. 4x upscaling can cost ≥10× a base image generation. Always surface cost in the pre-flight summary for upscale requests. If user says "just go ahead," still log the cost in the sidecar — they should know what they paid.
 
 ---
 

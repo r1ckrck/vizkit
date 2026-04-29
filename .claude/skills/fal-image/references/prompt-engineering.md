@@ -1,6 +1,6 @@
 # Prompt Engineering — fal-image
 
-The construction system used by `fal-image` to turn a user request into a production prompt for fal.ai image models. Read this before constructing any prompt. Adapted from banana-claude (model-agnostic content), tuned for fal models.
+The construction system used by `fal-image` to turn a user request into a production prompt for fal.ai image models. Read this before constructing any prompt.
 
 ---
 
@@ -59,28 +59,23 @@ These are non-negotiable. Violating any of them degrades output quality on every
 
 ---
 
-## Banned-word list (advisory)
+## Anchor language over generic quality words
 
-Generic quality terms correlate with low-quality SD-1.x training data. On Gemini and many fal models, these **degrade** output by pulling toward generic stock-photo aesthetics.
+Generic quality terms ("8K", "masterpiece", "ultra-detailed", "photorealistic", "trending on artstation", "best quality", "award winning") carry weak training-data signal. They pull toward stock-photo aesthetics. Replace them with concrete real-world anchors — camera bodies, lenses, film stocks, photographers, publications, art movements — which carry strong, distinct representations the model can render.
 
-> **Status: advisory in v1.** Prefer prestigious anchors (below) over these words. Do not strictly forbid — some terms may help on specific fal models (e.g., FLUX may not penalize "photorealistic"). Empirical re-validation per fal model is a follow-up task.
-
-| Banned (preferred to avoid) | Why |
+| Generic phrase | Concrete anchor |
 |---|---|
-| `8K`, `4K`, `ultra HD`, `high resolution` | Use the model's resolution parameter instead. The text in the prompt does nothing for actual pixel count. |
-| `masterpiece` | Pulls toward DeviantArt-era trope aesthetics. |
-| `highly detailed`, `ultra detailed` | Generic. Replace with specific micro-details. |
-| `trending on artstation` | Outdated. Pulls toward 2020-era ArtStation aesthetics. |
-| `hyperrealistic`, `ultra realistic` | Backfires — produces uncanny-valley output. |
-| `photorealistic` | Describe the camera/lens/film instead. The model knows what photorealism is from real-world camera names. |
-| `best quality` | Pulls toward "good enough" mediocrity. Specify the target instead. |
-| `award winning` | Use a specific publication or award name (Pulitzer, World Press Photo, etc.). |
+| "photorealistic" | "shot on Sony A7R IV with 85mm f/1.4" |
+| "8K, ultra-detailed" | a single named publication ("Vanity Fair editorial portrait") |
+| "masterpiece, award-winning" | a named award or publication ("World Press Photo documentary", "Pulitzer cover") |
+| "highly detailed" | one specific micro-detail ("subsurface scattering at the earlobe") |
+| "trending on artstation" | a named art movement or studio ("Bauhaus poster", "Pentagram editorial") |
 
 ---
 
 ## Prestigious context anchors
 
-Replace banned generic-quality words with **specific publication or award references**. These are training-data clusters the model has strong, distinct representations of.
+Replace generic quality words with **specific publication or award references**. These are training-data clusters the model has strong, distinct representations of.
 
 > Pulitzer Prize-winning cover photograph · Vanity Fair editorial portrait · National Geographic cover story · WIRED magazine feature spread · Architectural Digest interior · Magnum Photos documentary · Wallpaper* design editorial · Bon Appétit feature spread · Kinfolk magazine register · The Gentlewoman portrait · Vogue Italia fashion editorial · Harper's Bazaar fashion shoot · GQ portraiture · World Press Photo documentary · IPA International Photography Award
 
@@ -211,7 +206,7 @@ When users paste prompts copied from Midjourney, Stable Diffusion, or DALL-E dat
 | `--ar 16:9 --v 6 --style raw --chaos 30` | Strip flags. Move aspect ratio to the API parameter. |
 | `(masterpiece:1.5), (best quality:1.4)` | Strip weighted-prompt syntax. Use prose. |
 | `(woman:1.3), (red dress:1.2), beach, sunset` | Rewrite as narrative paragraph. |
-| `8K, masterpiece, ultra-detailed` | Strip banned words. Replace with publication anchor. |
+| `8K, masterpiece, ultra-detailed` | Replace with a publication anchor and a specific camera/lens spec. |
 | `shot on Hasselblad, 85mm f/1.4` | **Keep this** — real camera/lens specs are universal and work everywhere. |
 
 ---
@@ -224,6 +219,23 @@ When generating multiple images of the same character/subject across a session:
 - **Use named references** — "Maya" or "the engineer" — and pin those names in subsequent prompts.
 - **Hold the camera/lens specs constant** across the series unless deliberately changing perspective.
 - **Hold the lighting register constant** for visual continuity. Changing only what should change minimizes drift.
+- **Pass a character reference image** when the model supports it (Nano Banana Pro, Flux 2 [flex], Flux Kontext). Reference-image conditioning beats prose every time for identity lock — text alone cannot reliably reproduce a face across rolls.
+
+---
+
+## Per-model prompt-style notes
+
+Different models reward different opening orders and lengths. Adapt the construction to the target_model the orchestrator passes you.
+
+| Model | Opening | Length sweet spot | Notes |
+|---|---|---|---|
+| **Nano Banana Pro** | Subject + scene context, conversational | 80–200 words | World-aware — can name films, designers, magazines. Up to 14 reference images. |
+| **Flux 2 [pro]** | Subject-first, front-loaded | 80–200 words | HEX colors directly in prose. `(weight:1.5)` syntax ignored. |
+| **Flux Kontext [pro]** | Imperative edit instruction | ≤512 tokens | Name subjects, never use pronouns. Quote any literal text edits. |
+| **Recraft V4 Pro** | Describe the artifact itself | short, direct | Vector-friendly: "flat", "geometric", "two-color", "scalable". |
+| **Ideogram V3** | One-line scene summary, then quoted text | ~150 words | Describe typeface ("bold sans-serif"), never name fonts. Quote the literal text. |
+
+Across all models: paragraph prose only, never JSON, no negative prompts, no `(word:1.5)` weighting. Aspect ratio is always a parameter, not prose.
 
 ---
 
@@ -255,4 +267,4 @@ Final prompt (~140 words):
 
 > A weathered ceramic espresso mug with a slight chip at the rim, single shot of single-origin espresso showing a marbled tiger-stripe crema, resting on a worn oak counter inside a small-batch roastery at mid-morning. Single wisp of steam rising vertically before drifting toward camera-left. Tall industrial windows behind cast soft warm daylight across the counter, the roastery's brass espresso machine and copper kettle softly out of focus in the background. Shot at a forty-five-degree hero angle, intimate close-up framing on Hasselblad H6D-100c with 80mm Zeiss lens at f/2.8, shallow depth of field. Warm directional natural light from camera-right with a subtle white-card fill, brass highlights catching on the rim, true-to-life color with no Instagram filtering. Kinfolk magazine editorial register.
 
-This is a generation-ready prompt. It has all 5 slots filled, no banned words, real camera/lens specs, narrative prose, micro-details (chipped rim, marbled crema, single wisp, tiger-stripe), and a publication anchor.
+This is a generation-ready prompt. It has all 5 slots filled, real camera/lens specs, narrative prose, micro-details (chipped rim, marbled crema, single wisp, tiger-stripe), and a publication anchor.

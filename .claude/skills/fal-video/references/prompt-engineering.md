@@ -1,6 +1,6 @@
 # Prompt Engineering — fal-video
 
-The construction system used by `fal-video` to turn a user request into a production prompt for fal.ai video models. Read this before constructing any prompt. Same skeleton as fal-image's prompt-engineering, with **Motion** added as a first-class component and rules tightened around motion language.
+The construction system used by `fal-video` to turn a user request into a production prompt for fal.ai video models. Read this before constructing any prompt. Six components, with **Motion** as a first-class slot and rules tightened around motion language.
 
 ---
 
@@ -57,29 +57,24 @@ These are non-negotiable. Violating any of them degrades output quality on every
 
 ---
 
-## Banned-word list (advisory)
+## Anchor language over generic quality words
 
-Generic quality terms correlate with low-quality SD-1.x training data. On Gemini and many fal models, these **degrade** output by pulling toward generic stock-video aesthetics.
+Generic quality terms ("8K", "masterpiece", "ultra-detailed", "photorealistic", "cinematic", "epic", "dynamic motion", "smooth animation") carry weak training-data signal. They pull toward stock-video aesthetics. Replace them with concrete real-world anchors — cinematographers, camera bodies, lenses, film registers, publications — which carry strong, distinct representations the model can render.
 
-> **Status: advisory in v1.** Prefer concrete anchors over these words. Do not strictly forbid — some terms may help on specific fal models. Empirical re-validation per fal model is a follow-up task.
-
-| Banned (preferred to avoid) | Why |
+| Generic phrase | Concrete anchor |
 |---|---|
-| `8K`, `4K`, `ultra HD`, `high resolution` | Use the model's resolution parameter. Text in the prompt does nothing for actual pixel count. |
-| `masterpiece`, `best quality`, `award winning` | DeviantArt-era trope. Use a publication or cinematographer anchor. |
-| `highly detailed`, `ultra detailed` | Generic. Replace with specific micro-details. |
-| `hyperrealistic`, `ultra realistic`, `photorealistic` | Backfires — produces uncanny-valley output. Describe the camera/lens/film instead. |
-| `trending on artstation` | Outdated. Pulls toward 2020-era ArtStation aesthetics. |
-| **`cinematic`** *(when used as a generic quality word)* | Vague. Replace with a specific cinematographer, film register, or pacing word. "Roger Deakins handheld" carries information; "cinematic" doesn't. |
-| **`epic`** | Generic scale word. Replace with concrete scope: "drone aerial reveal pulling out from a single figure to reveal a 200-meter granite cliff face." |
-| **`dynamic motion`** | Tautological. Describe the actual motion: "rapid handheld whip-pan from foreground to background over 1.5 seconds." |
-| **`smooth animation`** | Generic. Specify the pacing: "locked-off with subject still" · "slow gentle drift" · "breath-held push-in." |
+| "cinematic" | a named cinematographer + camera-move family ("Roger Deakins handheld", "Lubezki natural-light drift") |
+| "epic" | concrete scope ("drone aerial reveal pulling out from a single figure to a 200-meter granite cliff face") |
+| "dynamic motion" | the literal motion ("rapid handheld whip-pan from foreground to background over 1.5 seconds") |
+| "smooth animation" | explicit pacing ("locked-off, breath-held push-in", "slow gentle drift") |
+| "8K, ultra-detailed" | a specific publication ("Vanity Fair video portrait", "National Geographic time-lapse") |
+| "photorealistic" | "shot on ARRI Alexa Mini LF with 50mm Cooke S7/i at T2.0" |
 
 ---
 
 ## Prestigious context anchors
 
-Replace banned generic-quality words with **specific publication, cinematographer, or film-register references**. These are training-data clusters with strong distinct representations.
+Replace generic quality words with **specific publication, cinematographer, or film-register references**. These are training-data clusters with strong distinct representations.
 
 **Image-side anchors that carry over:**
 > Pulitzer Prize-winning cover photograph · Vanity Fair editorial portrait · National Geographic cover story · WIRED magazine feature spread · Magnum Photos documentary · Wallpaper* design editorial · Architectural Digest interior · Bon Appétit feature spread
@@ -218,7 +213,7 @@ Before sending any prompt, verify it does NOT have any of these:
 | `--ar 16:9 --fps 24 --motion 5` (Midjourney video) | Strip flags. Move aspect ratio + fps to API parameters. |
 | `(masterpiece:1.5), (best quality:1.4)` | Strip weighted-prompt syntax. Use prose. |
 | `(woman:1.3), walking, beach, cinematic` | Rewrite as narrative paragraph with a real motion clause. |
-| `8K, masterpiece, ultra-detailed` | Strip banned words. Replace with cinematographer / publication anchor. |
+| `8K, masterpiece, ultra-detailed` | Replace with a cinematographer / publication anchor and a real camera/lens spec. |
 | `shot on ARRI Alexa, 50mm` | **Keep this** — real camera/lens specs are universal. |
 | `slow motion, time-lapse, hyperlapse` | Use sparingly; specify the speed effect explicitly (overcrank, undercrank, ramp). |
 
@@ -233,8 +228,22 @@ When generating multiple clips of the same character/subject across a session:
 - **Hold the camera/lens specs constant** across the series
 - **Hold the lighting register constant** for visual continuity
 - **Hold the motion register constant** — same camera-move family, same pacing — unless deliberately changing for a different beat
+- **Pass a character reference image** when the model supports it (Veo 3.1 Ingredients to Video, Kling I2V). Reference-image conditioning beats prose for identity lock — text alone cannot reliably reproduce a face across clips.
 
 Changing only what should change minimizes drift across clips.
+
+---
+
+## Per-model prompt-style notes
+
+Different models reward different opening orders and audio handling. Adapt the construction to the target_model the orchestrator passes you.
+
+| Model | Opening | Length sweet spot | Audio | Notes |
+|---|---|---|---|---|
+| **Veo 3.1** | **Cinematography-first** — shot type, camera move, lens, aperture before subject | flexible (long detailed paragraphs OK) | Native audio. When `audio_enabled` is true, weave the audio brief into prose ("ambient roastery hum, espresso machine hiss at three seconds, no music"). | Reference images supported as Ingredients to Video, up to 3 |
+| **Kling 2.5 Turbo Pro** | **Subject-first** + explicit motion verb in same sentence, director's voice | 50–150 words | None — don't mention audio | Strong physics; explicit motion language ("dolly in slowly") works well |
+
+Across all models: paragraph prose only, never JSON, no negative prompts, no `(word:1.5)` weighting. Aspect ratio, fps, and duration are always API parameters, not prose.
 
 ---
 
@@ -272,4 +281,4 @@ Final prompt (~165 words):
 
 > A weathered ceramic espresso mug with a hairline chip at the rim, single shot of single-origin espresso showing a marbled tiger-stripe crema, resting on a worn oak counter inside a small-batch roastery at mid-morning. Single wisp of steam rising vertically and curling slowly toward camera-left. Tall industrial windows behind cast soft warm daylight across the counter, the brass espresso machine and copper kettle softly out of focus in the background. Shot on Sony Venice 2 with 85mm Zeiss at T2.8, intimate 45-degree hero framing, shallow depth of field. Locked-off frame with a slow rack focus over four seconds, gentle drift pacing — the focus shifts from the chipped rim to the marbled crema, the rest of the frame stays still, only the steam wisp drifts upward. Subject motion subtle. Warm directional natural light from camera-right with a subtle white-card fill, true-to-life color, Wallpaper* design feature register.
 
-This is a generation-ready prompt. It has all 6 slots filled, no banned words, real camera/lens specs, narrative prose, micro-details (chipped rim, marbled crema, single wisp), an explicit camera move (locked-off + rack focus) with a duration (four seconds) and pacing (gentle drift), an explicit subject motion intensity (subtle), and a publication anchor.
+This is a generation-ready prompt. It has all 6 slots filled, real camera/lens specs, narrative prose, micro-details (chipped rim, marbled crema, single wisp), an explicit camera move (locked-off + rack focus) with a duration (four seconds) and pacing (gentle drift), an explicit subject motion intensity (subtle), and a publication anchor.
